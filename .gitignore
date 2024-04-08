@@ -1,3 +1,11 @@
 .Rproj.user
 
-data/CMC_proceedings/
+data/abstrackr/
+data/author_contact_results/
+data/CMC_proceedings_results/
+data/compiled_search_results/
+data/database_search_results/
+data/meta_reviewer/
+data/citation_chasing_results/
+
+protocol/
