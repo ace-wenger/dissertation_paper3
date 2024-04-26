@@ -16,8 +16,8 @@ This project attempts to explain heterogeneity by building on prior work in thre
 1. What is the mean effect size and heterogeneity of CM instructional interventions for different school science subjects (e.g., biology/life sciences)? 
 2. What is the extent of heterogeneity and how much is associated with each EMSI category?
 3. How much heterogeneity can be explained:
-    a. using a MUTOS-based, meta-regression model informed by previous findings?
-    b. using a meta-regression model constructed through a machine learning algorithm?
+  a. using a MUTOS-based, meta-regression model informed by previous findings?
+  b. using a meta-regression model constructed through a machine learning algorithm?
 4. What sample and intervention factors are associated with differences in CM efficacy?
 
 ## Ancillary Goals
