@@ -1,6 +1,6 @@
 # Working title: *Explaining Heterogeneity in Science Education Research - Comparing machine learning models with a priori meta-regression models*
 
-This project was completed as part of my dissertation for a Ph.D. in Science Education at Western Michigan University. 
+This project is part of my dissertation for a Ph.D. in Science Education at Western Michigan University. 
 My committee chair is Dr. William Cobern with Dr. Betty Adams and Dr. Ya Zhang serving as committee members.
 
 > [!NOTE]
@@ -48,42 +48,43 @@ It is intended that the production of figures and tables will also be reproducib
 - `data_rec_raw`
 - `data_es_raw`
 
-# Analysis Scripts and Pipeline (WIP)
-Below, each major section of the data analysis pipeline is explained and every target is listed.
+# Pipeline, Protocols, and Scripts (WIP)
+Some analysis of the results of the literature search process is kept out of the pipeline because of complexity of the literature search and screen process.
+Instead, the literature 
+each major section of the data analysis pipeline is explained and every target is listed.
 
 ## Data Collection: Protocols and Scripts
 
-### Protocols
-- [ ] 01_criteria_search_strategy
-- [ ] 02_lit_search_abstract_screening
+### Protocols and Methods
+- [x] 00_purposes_and_goals
+- [x] 01_search_strategy
+- [x] 02_abstract_screening
 - [ ] 03_fulltext_retrieval_screening
 - [ ] 04_fulltext_coding
 
 ### Scripts
-- [ ] 11_litsearch_phase1: database searches
+- [x] 11_litsearch_phase1: database searches
 - [ ] 12_litsearch_phase2: conference proceedings
 - [ ] 13_litsearch_phase3: citation chasing
 
-## Pipeline 1: Data Processing and Description
-
-### Search and Screen Results
-- [ ] `data_rec_raw`: tabulation of search results
-- [ ] `figure_PRISMA`: production of PRISMA diagram
+### (TBD)
 - [ ] `report_search`: render of parameterized basic search analysis
+  - [x] `data_rec_raw`: compilation of search results
+  - [x] `figure_PRISMA`: production of PRISMA diagram
 
-### Full-text Coding Results
-- [ ] `data_es_raw`:
+## Pipeline: Data Processing and Description
+- [ ] `data_es_raw`: 
 - [ ] `data_es_proc`:
 - [ ] `table_coding`:
 - [ ] `report_coding`: descriptive analysis of coding results
 - [ ] `report_missing`: missingness analysis
 
-## Pipeline 2: Multiple Imputation and Diagnostics
+## Pipeline: Multiple Imputation and Diagnostics
 
 ### Multiple Imputation
 
 ### Influential Cases, Checking Assumptions
 
-## Pipeline 3: Meta-Regression Modeling
+## Pipeline: Meta-Regression Modeling
 
-## Pipeline 4: Random Forest Machine Learning Modeling
+## Pipeline: Random Forest Machine Learning Modeling
