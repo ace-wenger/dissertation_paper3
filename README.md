@@ -72,10 +72,23 @@ each major section of the data analysis pipeline is explained and every target i
   - [x] `data_rec_raw`: compilation of search results
   - [x] `figure_PRISMA`: production of PRISMA diagram
 
-## Pipeline: Data Processing and Description
-- [ ] `data_es_raw`: 
-- [ ] `data_es_proc`:
-- [ ] `table_coding`:
+## Pipeline: Data Processing
+- [x] `data_es_stats_raw`: import of effect size stats, calculation of missing statistics with available statistics, and imputation of pre/post correlations
+- [x] `data_es_stats_full`: calculate effect size metrics using `data_es_stats_raw`
+- [x] `data_es_stats_proc`: choose effect size metrics from those available in `data_es_stats_full`
+- [x] `data_es_review`: select, rename, and compute summary variables for systematic review
+- [x] `data_es_meta`: select, refactor, and center variables for meta-analysis using `data_es_review`
+- [x] `data_vcv_matrix`: calculate and return variance-covariance matrix
+
+## Pipeline: Meta-Analytic Models
+- [x] `model_base`: run meta-regression model without moderators and return model object
+- [x] `index_influential`: calculate cook's distances and return index of influential
+- [x] `model_base_out`: run meta-regression model without moderators or influential cases and return model object
+- [ ] `data_imputed_list`:
+- [ ] `model_apriori`:
+- [ ] `ml_random_forest`:
+- [ ] `model_random_forest`:
+- [ ] `table_coding`: 
 - [ ] `report_coding`: descriptive analysis of coding results
 - [ ] `report_missing`: missingness analysis
 
