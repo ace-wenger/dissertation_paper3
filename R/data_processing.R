@@ -122,7 +122,7 @@ algorithm_es <- function(data) {
     !is.na(nC)
   ) |>
   # !!! Temporary !!! to keep the calculated vcv matrix positive definite
-  subset(!(std_id %in% c("S10057", "S10097", "S10361", "S20008", "S10265"))) |>
+  subset(!(std_id %in% c("S10057"))) |>
   select(
     rec_id:observation,
     nT,
@@ -482,6 +482,9 @@ proc_meta_coding <- function(data, threshold_miss) {
           TRUE ~ es_mth_msr_source
         )
       ),
+      es_cnd_noncm_desig = as_factor(es_cnd_noncm_desig),
+      std_qlt_int = factor(std_qlt_int),
+      es_qlt_measure = factor(es_qlt_measure),
       # var = sapply(var, function(x) look_up[[x]]),
       std_smp_subject = as_factor(std_smp_subject),
       std_smp_grade = as_factor(std_smp_grade),
@@ -512,6 +515,7 @@ proc_meta_coding <- function(data, threshold_miss) {
           TRUE ~ es_mth_msr_source
         )
       ),
+      es_cnd_cm_med_int = factor(es_cnd_cm_med_int),
       es_cnd_cm_use = as_factor(
         case_when(
           es_cnd_cm_use == "Not constructed by students" ~ "studied",
@@ -530,6 +534,13 @@ proc_meta_coding <- function(data, threshold_miss) {
           is.na(es_cnd_cm_type) ~ NA,
           TRUE ~ es_cnd_cm_type
         ),
+      ),
+      es_cnd_duration = as_factor(
+        case_when(
+          es_cnd_duration == "NR" ~ NA,
+          is.na(es_cnd_duration) ~ NA,
+          TRUE ~ es_cnd_duration
+        )
       ),
       # var = sapply(var, function(x) look_up[[x]]),
       es_msr_timing = as_factor(es_msr_timing)
