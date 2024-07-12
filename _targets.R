@@ -1,9 +1,11 @@
 # ====== Setup =================================================================
 ### Load packages required to define the pipeline:
 library(targets)
+library(tarchetypes)
 library(here)
 library(tidyverse)
 library(qs)
+library(formulaic)
 
 # Set target options:
 tar_option_set(format = "qs")
@@ -12,13 +14,84 @@ tar_option_set(format = "qs")
 sapply(list.files(here::here("R"), full.names = TRUE), source)
 # could use `tar_source` but this works
 
+# ====== Adjustable Parameters =================================================
+### Influential Case Multiple of Mean
+param_influential <- 5
+
+var_apriori <- c(
+  "rec_type",
+  "std_smp_cty_weird",
+  "es_mth_escalc",
+  "std_mth_smp_setting",
+  "es_mth_msr_source",
+  "es_cnd_noncm_desig",
+  "std_qlt_int",
+  "std_smp_subject",
+  "std_smp_grade",
+  # "es_cnd_cm_collab",
+  "es_cnd_cm_train",
+  # "es_cnd_cm_med_int",
+  "es_cnd_cm_use"
+  # "es_cnd_duration"
+)
+
+form_apriori <- create.formula(outcome.name = "yi", input.names = var_apriori)
+
+var_ml <- c(
+  "rec_yrpub",
+  "rec_type",
+  "std_smp_cty_weird",
+  "es_mth_escalc",
+  "std_mth_smp_setting",
+  # "std_mth_smp_breadth",
+  "es_mth_msr_source",
+  "es_cnd_noncm_desig",
+  "std_qlt_int",
+  "es_qlt_measure",
+  "std_smp_subject",
+  "std_smp_grade",
+  # "es_cnd_cm_collab",
+  "es_cnd_cm_train",
+  # "es_cnd_cm_med_int",
+  "es_cnd_cm_use",
+  # "es_cnd_cm_type",
+  # "es_cnd_duration",
+  "es_msr_timing"
+)
+
+form_ml <- create.formula(outcome.name = "yi", input.names = var_ml)
+
+var_ml_post <- c(
+  "rec_yrpub",
+  "rec_type",
+  "std_smp_cty_weird",
+  # "es_mth_escalc",
+  # "std_mth_smp_setting",
+  # "std_mth_smp_breadth",
+  # "es_mth_msr_source",
+  "es_cnd_noncm_desig",
+  "std_qlt_int",
+  "es_qlt_measure",
+  # "std_smp_subject",
+  "std_smp_grade"
+  # "es_cnd_cm_collab",
+  # "es_cnd_cm_train",
+  # "es_cnd_cm_med_int",
+  # "es_cnd_cm_use",
+  # "es_cnd_cm_type",
+  # "es_cnd_duration",
+  # "es_msr_timing"
+)
+
+form_ml_post <- create.formula(outcome.name = "yi", input.names = var_ml_post)
+
 # ====== Pipeline ==============================================================
 list(
   ### Data Handling targets: see `data_processing.r` script for functions
   tar_target(
     data_es_stats_raw,
     calc_missing_stats(
-      data = read_csv(here("es_stats-2.csv")),
+      data = read_csv(here("data", "es_stats-2.csv")),
       assumed_rpp = 0.6
     ),
   ),
@@ -30,9 +103,11 @@ list(
     data_es_stats_proc,
     algorithm_es(data = data_es_stats_full)
   ),
-  # processing for review table (selecting, renaming, and algorithms)
   tar_target(
     data_es_review,
+    # processing for review table (selecting, renaming, and algorithms)
+    # .$full          | for systematic review description
+    # .$reduced       | for missingness analysis
     proc_review_coding(
       coding_data = read_csv(
         here("data", "meta_reviewer_results", "FT_coding_results.csv")
@@ -43,29 +118,37 @@ list(
       es_data = data_es_stats_proc
     )
   ),
-  # processing for meta table (selecting, centering, and re-classing)
-  tar_target(
-    data_es_meta,
-    proc_meta_coding(
-      data = data_es_review,
-      threshold_miss = 35
-    )
-  # ),
   # # target for descriptive analysis of missing data
   # tar_target(
   #   missing_analysis,
   #   missing_data_function()
+  # ),
+  # tar_quarto(
+  #   report_missing_data,
+  #   path = here("reports", "report_missing_data.qmd")
   # ),
   # # target for descriptive analysis of variables of potential interest
   # descriptives may include frequency tables and Kruskal-Wallis (sp?) plots
   # tar_target(
   #   description_analysis,
   #   description_analysis_function()
+  # ),
+  tar_target(
+    data_es_meta,
+    # processing for meta table (selecting, centering, and re-classing)
+    # .$transformed   | for
+    # .$regression    | for
+    # .$imputation    | for
+    # .$tbl_missing   | for
+    proc_meta_coding(
+      data = data_es_review$full,
+      threshold_miss = 50
+    )
   ),
   tar_target(
     data_vcv_matrix,
     calc_matrix(
-      data = data_es_meta,
+      data = data_es_meta$regression,
       between_time_r = 0.6,
       between_obs_occ_r = c(0.8, 0.4)
     )
@@ -76,42 +159,83 @@ list(
       plot_tag = "base",
       profile_plot = TRUE,
       es_plot = TRUE,
-      data = data_es_meta,
+      data = data_es_meta$regression,
       vcv = data_vcv_matrix,
     )
   ),
-  #
   tar_target(
-    index_influential,
+    influential_cases,
+    # identification of influential cases
+    # .$index         | for identification of influential cases
+    # .$distances     | cooks distances values
     diagnostic_cooks(
       plot_tag = "base",
       data_model = model_base,
-      threshold_influential = 5
+      threshold_influential = param_influential
     )
   ),
-  ## need to change `rma_basemodel` to accept `index_study` argument
   tar_target(
     model_base_out,
     rma_basemodel(
       plot_tag = "base_out",
       profile_plot = TRUE,
       es_plot = TRUE,
-      data = data_es_meta,
+      data = data_es_meta$regression,
       vcv = data_vcv_matrix,
       prior_model = model_base,
-      influential = index_influential
+      influential = influential_cases$index
     )
-  # ),
+  ),
 
 ### Primary Analyses #################################################
+  tar_target(
+    model_apriori_out,
+    rma_multi(
+      data = data_es_meta$regression,
+      vcv = data_vcv_matrix,
+      formula = form_apriori$formula,
+      basemodel = model_base_out,
+      influential = influential_cases$index
+    )
+  ),
+  tar_target(
+    check_ml_convergence,
+    ml_converge(
+      n_trees = 10000,
+      data = data_es_meta$regression,
+      form = form_ml$formula,
+      influential = influential_cases$index
+    )
+  ),
+  tar_target(
+    preselected_mods,
+    ml_preselect(
+      n_trees = 5000,
+      reps = 100,
+      data = data_es_meta$regression,
+      form = form_ml$formula,
+      influential = influential_cases$index
+    )
+  # ),
   # tar_target(
-  #   model_apriori_out,
-    # rma_formula(
-    #   formula = something,
-    #   data = data_es_meta,
-    #   vcv = data_vcv_matrix,
-    #   index_study = index_influential
-    # )
+  #   trained_model,
+  #   ml_train(
+  #     n_trees = 5000,
+  #     data = data_es_meta$regression,
+  #     mods = preselected_mods,
+  #     influential = influential_cases$index
+  #   )
+  ),
+  tar_target(
+    model_ml_post_out,
+    rma_multi(
+      data = data_es_meta$regression,
+      vcv = data_vcv_matrix,
+      formula = form_ml_post$formula,
+      basemodel = model_base_out,
+      influential = influential_cases$index
+    )
+  )
   # ),
   # tar_target(
   #   model_rand_forest_out,

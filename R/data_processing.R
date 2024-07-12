@@ -5,10 +5,32 @@
 # library(here)
 
 # ===== Pipeline Functions =====================================================
+#' Calculate missing statistics and impute missing pre-post correlations
+#'
+#' @description A function called in the `targets` pipeline which calls
+#'   `expand_missing_stats()` and `assume_rpp()` to calculate missing statistics
+#'   (such as change score standard deviation) and impute missing pre-post
+#'   correlations.
+#'
+#' @inheritParams expand_missing_stats
+#' @param data A data.frame or similar object containing summary statistics for
+#'   effect size calculations. Columns ought to be named according to the data
+#'   dictionary "data_stats_full_table."
+#' @param assumed_rpp A single numeric value
+#'
+#' @return
 calc_missing_stats <- function(data, assumed_rpp) {
   data |> expand_missing_stats() |> assume_rpp(r = assumed_rpp)
 }
 
+#' Title
+#'
+#' @param data
+#'
+#' @return
+#' @export
+#'
+#' @examples
 calc_es <- function(data) {
   data |>
     mutate(zdat = 0) |>  # vector of zeros for escalc functions
@@ -121,8 +143,8 @@ algorithm_es <- function(data) {
     !is.na(nT),
     !is.na(nC)
   ) |>
-  # !!! Temporary !!! to keep the calculated vcv matrix positive definite
-  subset(!(std_id %in% c("S10057"))) |>
+  # If calculated vcv matrix is not positive definite, filter out study cluster
+  # subset(!(std_id %in% c("S10057"))) |>
   select(
     rec_id:observation,
     nT,
@@ -255,21 +277,9 @@ proc_review_coding <- function(coding_data, screening_data, es_data) {
       std_qlt_design = std_mth_dsg
     )
 
-  left_join(coding_dat, screen_dat, by = "std_id") |>
-    inner_join(es_data) |>
+  review_full <- left_join(coding_dat, screen_dat, by = c("std_id")) |>
+    left_join(es_data, by = c("rec_id", "std_id", "es_id")) |>
     relocate(std_smp_subject:std_qlt_design, .before = std_mth_smp_setting) |>
-    # mutate(
-    #   rec_decpub = case_when(
-    #     rec_yrpub >= 2020 ~ 6,
-    #     rec_yrpub >= 2010 ~ 5,
-    #     rec_yrpub >= 2000 ~ 4,
-    #     rec_yrpub >= 1990 ~ 3,
-    #     rec_yrpub >= 1980 ~ 2,
-    #     rec_yrpub >= 1970 ~ 1,
-    #     .default = NA
-    #   ),
-    #   .before = std_id
-    # ) |>
     mutate(
       std_qlt_att_threat = if_else(
         std_qlt_att_threat == "NR",
@@ -360,6 +370,7 @@ proc_review_coding <- function(coding_data, screening_data, es_data) {
         comp_sd = pst_sdC
       ),
       es_qlt_measure = algorithm_measure(
+        source = es_mth_msr_source,
         restriction = es_qlt_msr_restriction,
         reliability = es_qlt_msr_reliability,
         validity = es_qlt_msr_validity,
@@ -374,11 +385,60 @@ proc_review_coding <- function(coding_data, screening_data, es_data) {
       .before = grpT
     ) |> select(!pst_mT:pst_sdC)
 
+  review_reduced <- review_full |> select(
+    !c(
+      rec_title,
+      rec_author,
+      std_smp_subject_author,
+      std_smp_grade_author_unit,
+      std_smp_grade_author_value,
+      std_smp_cty_region,
+      std_smp_eth,
+      std_smp_eth_notes,
+      std_smp_ses_notes,
+      std_smp_author_note,
+      std_qlt_cnf_note,
+      std_qlt_cnd_imp_mth,
+      std_qlt_cnd_event_note,
+      std_qlt_cnd_contam_note,
+      std_qlt_msr_report,
+      es_name,
+      es_cnd_noncm_name,
+      es_cnd_noncm_desc,
+      es_qlt_noncm_instr_train,
+      es_cnd_noncm_note,
+      es_cnd_cm_name,
+      es_cnd_cm_desc,
+      es_cnd_cm_use_scaf,
+      es_cnd_cm_use_rev,
+      es_qlt_cm_instr_train,
+      es_cnd_cm_note,
+      es_msr_name,
+      es_qlt_msr_validity,
+      es_qlt_msr_rel_x,
+      es_msr_rng_x,
+      es_msr_timing_delay,
+      es_msr_timing_mid,
+      es_msr_note,
+      grpT,
+      grpC,
+      occasion,
+      time,
+      observation,
+      nT,
+      nC,
+      es_general_notes
+    )
+  )
+
+  list(full = review_full, reduced = review_reduced)
 }
 
 proc_meta_coding <- function(data, threshold_miss) {
 
-  data_es_meta_all <- data |>
+  # data
+
+  data_es_meta_transformed <- data |>
     select(
       rec_id,
       rec_author,
@@ -419,25 +479,41 @@ proc_meta_coding <- function(data, threshold_miss) {
       es_msr_timing
     ) |>
     mutate(
+      rec_decpub = case_when(
+        rec_yrpub >= 2020 ~ 5,
+        rec_yrpub >= 2010 ~ 4,
+        rec_yrpub >= 2000 ~ 3,
+        rec_yrpub >= 1990 ~ 2,
+        rec_yrpub >= 1980 ~ 1,
+        rec_yrpub >= 1970 ~ 0,
+        .default = NA
+      ),
+      .before = rec_type
+    ) |>
+    mutate(
       rec_yrpub = rec_yrpub - min(rec_yrpub),
-      rec_type = as_factor(
-        case_when(
-          rec_type == "Journal Article" ~ "article",
-          rec_type == "Dissertation/Thesis" ~ "thesis",
-          rec_type == "Conference Paper" ~ "paper",
-          rec_type == "Preprint" ~ "paper",
-          rec_type == "other/unsure" ~ "paper",
-          TRUE ~ rec_type
-        )
+      rec_type = relevel(
+        as_factor(
+          case_when(
+            rec_type == "Journal Article" ~ "article",
+            rec_type == "Dissertation/Thesis" ~ "thesis",
+            rec_type == "Conference Paper" ~ "paper",
+            rec_type == "Report" ~ "paper",
+            rec_type == "Preprint" ~ "paper",
+            rec_type == "Other/Unsure" ~ "paper",
+            TRUE ~ rec_type
+          )
+        ), ref = "article"
       ),
       # var = sapply(var, function(x) look_up[[x]]),
       std_smp_cty_weird = as_factor(std_smp_cty_weird),
-      es_mth_escalc = as_factor(es_mth_escalc),
+      es_mth_escalc = relevel(as_factor(es_mth_escalc), ref = "posttest"),
+      # ASSUMPTION
       std_mth_smp_setting = as_factor(
         case_when(
           str_detect(std_mth_smp_setting, "Class") ~ "Class",
           str_detect(std_mth_smp_setting, "Lab") ~ "Lab",
-          str_detect(std_mth_smp_setting, "unsure") ~ "Other",
+          str_detect(std_mth_smp_setting, "unsure") ~ "Class",
           std_mth_smp_setting == "NR" ~ NA,
           is.na(std_mth_smp_setting) ~ NA,
           TRUE ~ std_mth_smp_setting
@@ -457,16 +533,18 @@ proc_meta_coding <- function(data, threshold_miss) {
         )
       ),
       # var = sapply(var, function(x) look_up[[x]]),
-      std_mth_assign_unit = as_factor(
-        case_when(
-          std_mth_assign_unit == "Individual" ~ "individual",
-          std_mth_assign_unit == "Pairs/groups" ~ "other",
-          std_mth_assign_unit == "Classes/teachers" ~ "class_teacher",
-          std_mth_assign_unit == "Schools" ~ "other",
-          std_mth_assign_unit == "NR" ~ NA,
-          is.na(std_mth_assign_unit) ~ NA,
-          TRUE ~ std_mth_assign_unit
-        )
+      std_mth_assign_unit = relevel(
+        as_factor(
+          case_when(
+            std_mth_assign_unit == "Individual" ~ "individual",
+            std_mth_assign_unit == "Pairs/groups" ~ "other",
+            std_mth_assign_unit == "Classes/teachers" ~ "class_teacher",
+            std_mth_assign_unit == "Schools" ~ "other",
+            std_mth_assign_unit == "NR" ~ NA,
+            is.na(std_mth_assign_unit) ~ NA,
+            TRUE ~ std_mth_assign_unit
+          )
+        ), ref = "class_teacher"
       ),
       # std_qlt_assign_equate = as_factor(std_qlt_assign_equate),
       es_mth_msr_source = as_factor(
@@ -477,13 +555,14 @@ proc_meta_coding <- function(data, threshold_miss) {
           es_mth_msr_source == "Published-commercial" ~ "published",
           es_mth_msr_source == "Standardized" ~ "other",
           es_mth_msr_source == "Other/unsure" ~ "other",
-          es_mth_msr_source == "NR" ~ NA,
+          # ASSUMPTION
+          es_mth_msr_source == "NR" ~ "researcher",
           is.na(es_mth_msr_source) ~ NA,
           TRUE ~ es_mth_msr_source
         )
       ),
-      es_cnd_noncm_desig = as_factor(es_cnd_noncm_desig),
-      std_qlt_int = factor(std_qlt_int),
+      es_cnd_noncm_desig = relevel(as_factor(es_cnd_noncm_desig), ref = "BAU"),
+      std_qlt_int = relevel(factor(std_qlt_int), ref = "0"),
       es_qlt_measure = factor(es_qlt_measure),
       # var = sapply(var, function(x) look_up[[x]]),
       std_smp_subject = as_factor(std_smp_subject),
@@ -501,29 +580,33 @@ proc_meta_coding <- function(data, threshold_miss) {
           es_cnd_cm_collab == "Whole-class activity" ~ "class_other",
           es_cnd_cm_collab == "Other" ~ "class_other",
           es_cnd_cm_collab == "NR" ~ NA,
-          is.na(es_mth_msr_source) ~ NA,
+          is.na(es_cnd_cm_collab) ~ NA,
           TRUE ~ es_cnd_cm_collab
         )
       ),
       es_cnd_cm_train = as_factor(
         case_when(
-          es_cnd_cm_train == "No" ~ "no",
-          es_cnd_cm_train == "Minimal (1 session, <60 minutes)" ~ "minimal",
-          es_cnd_cm_train == "Yes (2+ sessions, 60+ minutes)" ~ "yes",
+          es_cnd_cm_train == "No training" ~ "no",
+          es_cnd_cm_train == "Minimal (1 session, <30 minutes)" ~ "minimal",
+          es_cnd_cm_train == "Some (1-2 sessions, 30-90 minutes)" ~ "some",
+          es_cnd_cm_train == "Extensive (2+ sessions, 90+ minutes)" ~ "extensive",
           es_cnd_cm_train == "NR" ~ "no",
-          is.na(es_mth_msr_source) ~ NA,
-          TRUE ~ es_mth_msr_source
+          is.na(es_cnd_cm_train) ~ NA,
+          TRUE ~ es_cnd_cm_train
         )
       ),
       es_cnd_cm_med_int = factor(es_cnd_cm_med_int),
-      es_cnd_cm_use = as_factor(
-        case_when(
-          es_cnd_cm_use == "Not constructed by students" ~ "studied",
-          es_cnd_cm_use == "Constructed by students" ~ "constructed",
-          es_mth_msr_source == "NR" ~ NA,
-          is.na(es_mth_msr_source) ~ NA,
-          TRUE ~ es_mth_msr_source
-        )
+      es_cnd_cm_use = relevel(
+        as_factor(
+          case_when(
+            es_cnd_cm_use == "Not constructed by students" ~ "studied",
+            es_cnd_cm_use == "Constructed by students" ~ "constructed",
+            # ASSUMPTION
+            es_cnd_cm_use == "NR" ~ "constructed",
+            is.na(es_cnd_cm_use) ~ NA,
+            TRUE ~ es_cnd_cm_use
+          )
+        ), ref = "constructed"
       ),
       es_cnd_cm_type = as_factor(
         case_when(
@@ -535,7 +618,7 @@ proc_meta_coding <- function(data, threshold_miss) {
           TRUE ~ es_cnd_cm_type
         ),
       ),
-      es_cnd_duration = as_factor(
+      es_cnd_duration = as.double(
         case_when(
           es_cnd_duration == "NR" ~ NA,
           is.na(es_cnd_duration) ~ NA,
@@ -546,12 +629,43 @@ proc_meta_coding <- function(data, threshold_miss) {
       es_msr_timing = as_factor(es_msr_timing)
     )
 
-  tab_miss_var <- mis_ma_var_summary(data_es_meta_all, "vi", truncate = TRUE)
+  tbl_missing <- mis_ma_var_summary(
+    data_es_meta_transformed,
+    "vi",
+    truncate = FALSE
+  )
 
-  data_es_meta <- data_es_meta_all |>
-    select(!filter(tab_miss_var, pct_miss > threshold_miss)$Variable)
+  data_es_meta_regression <- data_es_meta_transformed |> mutate(
+    std_id = as.double(str_extract(std_id, "\\d+")),
+    cons = 1)
+    # select(!filter(tbl_missing, pct_miss > threshold_miss)$Variable)
 
-  return(data_es_meta)
+  data_es_meta_imputation <- data_es_meta_regression |>
+    dummy_cols(
+      select_columns = c(
+        "rec_type",
+        "es_mth_escalc",
+        "std_mth_smp_breadth",
+        "std_mth_assign_unit",
+        "es_mth_msr_source",
+        "es_cnd_noncm_desig",
+        "std_smp_subject",
+        "std_smp_grade",
+        "es_cnd_cm_train",
+        "es_cnd_cm_use",
+        "es_msr_timing"
+      ),
+      remove_selected_columns = TRUE,
+      remove_first_dummy = TRUE
+    )
+
+  list(
+    transformed = data_es_meta_transformed,
+    regression = data_es_meta_regression,
+    imputation = data_es_meta_imputation,
+    # metaforest = data_es_meta_forest,
+    tbl_missing = tbl_missing
+  )
 }
 
 calc_matrix <- function(data, between_time_r, between_obs_occ_r) {
@@ -600,7 +714,16 @@ calc_matrix <- function(data, between_time_r, between_obs_occ_r) {
 # same construct of interest collected at the same in the same intervention.
 
 # ===== Helper `calc_missing_stats` and `calc_es` Functions ====================
-# calculating missing mean differences, sdD, and r
+#' Calculating missing mean differences, sdD, and r
+#'
+#' @param data A data.frame or similar object containing summary statistics for
+#'   effect size calculations. Columns ought to be named according to the data
+#'   dictionary "data_stats_full_table."
+#'
+#' @return
+#' @export
+#'
+#' @examples
 expand_missing_stats <- function(data) {
   mutate(data,
          chg_mT  = if_else(
@@ -710,7 +833,7 @@ calc_vi_ancova <- function(data, n1, n2, d, r) {
 
 cty_weird <- c("Austrailia", "Australia", "Belgium", "Canada", "Finland", "Germany", "Ireland", "Netherlands", "The Netherlands", "New Zealand", "Norway", "Spain", "Sweden", "United Kingdom", "United States")
 
-cty_non_weird <- c("Algeria", "Bolivia", "Chile", "China", "Colombia", "Ethiopia", "Gaza", "Ghana", "Greece", "India", "Indonesia", "Iran", "Jamaica", "Japan", "Jordan", "Lebanon", "Lithuania", "Malaysia", "Mexico", "Nigeria", "Lagos", "Oman", "Pakistan", "Peru", "Poland", "Romania", "Rwanda", "Saudi Arabia", "Serbia", "Singapore", "Slovenia", "South Africa", "South Korea", "Taiwan", "Thailand", "Turkey", "United Arab Emirates", "Zambia")
+cty_non_weird <- c("Algeria", "Bolivia", "Chile", "China", "Colombia", "Cyprus", "Ethiopia", "Gaza", "Ghana", "Greece", "India", "Indonesia", "Iran", "Jamaica", "Japan", "Jordan", "Lebanon", "Lithuania", "Malaysia", "Mexico", "Nigeria", "Lagos", "Oman", "Pakistan", "Peru", "Poland", "Romania", "Rwanda", "Saudi Arabia", "Serbia", "Singapore", "Slovenia", "South Africa", "South Korea", "Taiwan", "Thailand", "Turkey", "United Arab Emirates", "Zambia")
 
 cnd_modes <- list(
   "Item 1" = "Physical, classroom/lab",
@@ -980,9 +1103,17 @@ algorithm_msr_restriction <- function(
 }
 
 # ALGORITHM: Does the outcome measure provide a good estimate of effect?
-algorithm_measure <- function(restriction, reliability, validity, alignment) {
+algorithm_measure <- function(
+    source,
+    restriction,
+    reliability,
+    validity,
+    alignment) {
 
   validity <- case_when(
+    source == "Published-academic" ~ "yes",
+    source == "Published-commercial" ~ "yes",
+    source == "Standardized" ~ "yes",
     validity == "Yes" ~ "yes",
     validity == "Unsure" ~ "yes",
     validity == "No" ~ "no",
